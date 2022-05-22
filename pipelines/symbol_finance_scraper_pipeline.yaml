@@ -1,0 +1,34 @@
+queues:
+  - name: symbol_queue
+    description: Contains company stock symbols. Finance worker then tries to scrape their stock prices.
+
+  - name: postgres_queue
+    description: Data dictionaries that need to be inserted in postgres.
+
+workers:
+  - name: symbol_worker
+    description: Scrapes wikipedia S&P 500 company page and extracts company stock symbols.
+    note: Only have 1 instance here, as we dont want to scrape same S&P500 symbols multiple times.
+    location: workers.SymbolWorker
+    class: SymbolWorkerMasterScheduler
+    instances: 1  # please do not change, otherwise we get duplicates, see notes above
+    input_values:
+      - "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    output_queues:
+     - symbol_queue
+
+  - name: finance_worker
+    description: Scrapes price for specific stock symbol from marketwatch.com.
+    location: workers.FinanceWorker
+    class: FinancePriceScheduler
+    instances: 4
+    input_queue: symbol_queue
+    output_queues:
+      - postgres_queue
+
+  - name: postgres_worker
+    description: Writes stock data into postgres DB.
+    location: workers.PostgresWorker
+    class: PostgresMasterScheduler
+    instances: 2
+    input_queue: postgres_queue
